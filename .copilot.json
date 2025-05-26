@@ -1,0 +1,27 @@
+{
+  "rules": [
+    "Always use prepared statements for SQL.",
+    "Use JavaFX best practices for UI.",
+    "Do not use deprecated Java APIs.",
+    "Ensure proper error handling in all methods.",
+    "Follow Java naming conventions for variables and methods.",
+    "Use consistent indentation and formatting.",
+    "Avoid using magic numbers; use constants instead.",
+    "Use Java 8+ features like streams and lambdas where appropriate.",
+    "Use meaningful variable names that reflect their purpose.",
+    "Avoid deep nesting of code blocks for better readability.",
+    "Use try-with-resources for managing resources like database connections.",
+    "Ensure that all exceptions are caught and handled appropriately.",
+    "Use enums instead of constants for fixed sets of values.",
+    "Keep methods short and focused on a single task.",
+    "Use interfaces to define contracts for classes.",
+    "Avoid using raw types; use generics instead.",
+    "Use collections appropriately; prefer List over arrays for dynamic data.",
+    "Write code that is easy to read and maintain.",
+    "Avoid hardcoding values; use configuration files where possible.",
+    "Use functional interfaces for callback mechanisms.",
+    "Keep the codebase modular to facilitate easier updates and maintenance.",
+    "Avoid using global variables to maintain state.",
+    "Ensure that all code adheres to the project's coding standards."
+  ]
+}
