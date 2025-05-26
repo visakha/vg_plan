@@ -1,4 +1,4 @@
-package org.vgplan.vg_plan;
+package org.vgplan.plan;
 
 import javafx.application.Application;
 import javafx.scene.Scene;
@@ -24,6 +24,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.Properties;
+import java.io.InputStream;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -31,16 +33,18 @@ import com.zaxxer.hikari.HikariDataSource;
 public class KanbanProjectManager extends Application {
 
     private static final String DB_URL = "jdbc:sqlite:project_kanban.db";
-    private static HikariDataSource dataSource;
+    static HikariDataSource dataSource;
 
     private BorderPane rootPane;
     private HBox columnsContainer;
     private ObservableList<KanbanColumn> columns;
 
-    private static final List<String> TEAM_MEMBERS = Arrays.asList("SSA1", "SA2", "India PM", "Dev1", "Dev2", "Dev3", "Dev4", "Dev5", "Dev6", "Unassigned");
-    private static final List<String> MODULES = Arrays.asList("Ingress", "Egress", "MDM Customization", "Planning", "General");
+    private static final List<String> TEAM_MEMBERS = Arrays.asList("SSA1", "SA2", "India PM", "Dev1", "Dev2", "Dev3",
+            "Dev4", "Dev5", "Dev6", "Unassigned");
+    private static final List<String> MODULES = Arrays.asList("Ingress", "Egress", "MDM Customization", "Planning",
+            "General");
     private static final List<String> PRIORITIES = Arrays.asList("High", "Medium", "Low");
-    private static final List<String> STATUS_LIST = Arrays.asList("To Do", "In Progress", "Blocked", "In Review", "Done");
+    static final List<String> STATUS_LIST = Arrays.asList("To Do", "In Progress", "Blocked", "In Review", "Done");
 
     // For keyboard navigation
     private int focusedColumnIndex = 0;
@@ -74,7 +78,6 @@ public class KanbanProjectManager extends Application {
         mainScrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER); // Vertical scroll within columns
         rootPane.setCenter(mainScrollPane);
 
-
         // Menu Bar
         MenuBar menuBar = createMenuBar(primaryStage);
         rootPane.setTop(menuBar);
@@ -83,16 +86,18 @@ public class KanbanProjectManager extends Application {
         loadTasksFromDB();
 
         Scene scene = new Scene(rootPane, 1200, 800);
-        // Ensure styles.css is in the correct location (e.g., src/main/resources if using Maven/Gradle)
-        // For simple setups, it can be in the same directory as the .java file, but classpath might need adjustment.
+        // Ensure styles.css is in the correct location (e.g., src/main/resources if
+        // using Maven/Gradle)
+        // For simple setups, it can be in the same directory as the .java file, but
+        // classpath might need adjustment.
         try {
             String cssPath = getClass().getResource("/styles.css").toExternalForm();
             scene.getStylesheets().add(cssPath);
         } catch (NullPointerException e) {
-            System.err.println("Warning: styles.css not found. Ensure it's in the classpath (e.g., src/main/resources folder or same directory and classpath is set).");
+            System.err.println(
+                    "Warning: styles.css not found. Ensure it's in the classpath (e.g., src/main/resources folder or same directory and classpath is set).");
             // Add basic inline styles as a fallback or instruct user
         }
-
 
         setupKeyboardNavigation(scene);
         updateColumnFocus(); // Initial focus
@@ -105,7 +110,8 @@ public class KanbanProjectManager extends Application {
     private void setupDataSource() {
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl(DB_URL);
-        // The driver class name is usually not needed for modern JDBC drivers if the JAR is in the classpath.
+        // The driver class name is usually not needed for modern JDBC drivers if the
+        // JAR is in the classpath.
         // config.setDriverClassName("org.sqlite.JDBC");
         config.setUsername("");
         config.setPassword("");
@@ -116,56 +122,24 @@ public class KanbanProjectManager extends Application {
         dataSource = new HikariDataSource(config);
     }
 
-
     private void setupDatabase() {
-        String createProjectPhasesTableSQL = "CREATE TABLE IF NOT EXISTS project_phases (" +
-                "phase_id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                "phase_name TEXT NOT NULL UNIQUE," +
-                "skill_sets TEXT" +
-                ");";
-        String createEpicsTableSQL = "CREATE TABLE IF NOT EXISTS epics (" +
-                "epic_id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                "epic_name TEXT NOT NULL," +
-                "phase_id INTEGER NOT NULL," +
-                "FOREIGN KEY (phase_id) REFERENCES project_phases(phase_id)" +
-                ");";
-        String createTaskTableSQL = "CREATE TABLE IF NOT EXISTS tasks (" +
-                "id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                "title TEXT NOT NULL," +
-                "description TEXT," +
-                "assignee TEXT," +
-                "module TEXT," +
-                "status TEXT NOT NULL," +
-                "priority TEXT," +
-                "due_date TEXT," +
-                "epic_id INTEGER," +
-                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
-                "FOREIGN KEY (epic_id) REFERENCES epics(epic_id)" +
-                ");";
-        String createSubTaskTableSQL = "CREATE TABLE IF NOT EXISTS subtasks (" +
-                "subtask_id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                "subtask_name TEXT NOT NULL," +
-                "task_id INTEGER NOT NULL," +
-                "FOREIGN KEY (task_id) REFERENCES tasks(id)" +
-                ");";
-        String createRaciActivitiesTableSQL = "CREATE TABLE IF NOT EXISTS raci_activities (" +
-                "activity_id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                "activity_name TEXT NOT NULL UNIQUE" +
-                ");";
-        String createTeamMembersTableSQL = "CREATE TABLE IF NOT EXISTS team_members (" +
-                "member_id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                "member_name TEXT NOT NULL UNIQUE" +
-                ");";
-        String createRaciAssignmentsTableSQL = "CREATE TABLE IF NOT EXISTS raci_assignments (" +
-                "assignment_id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                "activity_id INTEGER NOT NULL," +
-                "member_id INTEGER NOT NULL," +
-                "raci_role TEXT NOT NULL," +
-                "FOREIGN KEY (activity_id) REFERENCES raci_activities(activity_id)," +
-                "FOREIGN KEY (member_id) REFERENCES team_members(member_id)," +
-                "UNIQUE (activity_id, member_id)" +
-                ");";
-
+        Properties sqlProps = new Properties();
+        try (InputStream in = getClass().getResourceAsStream("/org/vgplan/plan/db_schema.properties")) {
+            if (in != null) {
+                sqlProps.load(in);
+            } else {
+                throw new RuntimeException("Could not find db_schema.properties");
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load db_schema.properties: " + e.getMessage(), e);
+        }
+        String createProjectPhasesTableSQL = sqlProps.getProperty("createProjectPhasesTable");
+        String createEpicsTableSQL = sqlProps.getProperty("createEpicsTable");
+        String createTaskTableSQL = sqlProps.getProperty("createTaskTable");
+        String createSubTaskTableSQL = sqlProps.getProperty("createSubTaskTable");
+        String createRaciActivitiesTableSQL = sqlProps.getProperty("createRaciActivitiesTable");
+        String createTeamMembersTableSQL = sqlProps.getProperty("createTeamMembersTable");
+        String createRaciAssignmentsTableSQL = sqlProps.getProperty("createRaciAssignmentsTable");
 
         try (Connection conn = dataSource.getConnection(); Statement stmt = conn.createStatement()) {
             stmt.execute(createProjectPhasesTableSQL);
@@ -178,20 +152,31 @@ public class KanbanProjectManager extends Application {
             System.out.println("Database tables checked/created successfully.");
 
             // Pre-populate team members if table is empty
-            for (String memberName : TEAM_MEMBERS) {
-                try (PreparedStatement psCheck = conn.prepareStatement("SELECT COUNT(*) FROM team_members WHERE member_name = ?");
-                     PreparedStatement psInsert = conn.prepareStatement("INSERT INTO team_members (member_name) VALUES (?)")) {
-                    psCheck.setString(1, memberName);
-                    ResultSet rs = psCheck.executeQuery();
-                    if (rs.next() && rs.getInt(1) == 0) {
-                        psInsert.setString(1, memberName);
-                        psInsert.executeUpdate();
-                    }
+            try (PreparedStatement psCheck = conn.prepareStatement("SELECT COUNT(*) FROM team_members");
+                    ResultSet rs = psCheck.executeQuery()) {
+                if (rs.next() && rs.getInt(1) == 0) {
+                    insertDefaultTeamMembers(conn);
                 }
             }
 
         } catch (SQLException e) {
             System.err.println("Error creating database tables: " + e.getMessage());
+        }
+    }
+
+    private void insertDefaultTeamMembers(Connection conn) throws SQLException {
+        for (String memberName : TEAM_MEMBERS) {
+            try (PreparedStatement psCheck = conn
+                    .prepareStatement("SELECT COUNT(*) FROM team_members WHERE member_name = ?");
+                    PreparedStatement psInsert = conn
+                            .prepareStatement("INSERT INTO team_members (member_name) VALUES (?)")) {
+                psCheck.setString(1, memberName);
+                ResultSet rs = psCheck.executeQuery();
+                if (rs.next() && rs.getInt(1) == 0) {
+                    psInsert.setString(1, memberName);
+                    psInsert.executeUpdate();
+                }
+            }
         }
     }
 
@@ -216,64 +201,19 @@ public class KanbanProjectManager extends Application {
 
     // --- Project Hierarchy Dialog ---
     // Update: Ctrl+N always creates a child, double-click edits
+    /**
+     * Shows the Project Hierarchy dialog using the modular ProjectHierarchyDialog
+     * class.
+     * 
+     * @param ownerStage the parent stage
+     */
     private void showProjectHierarchyDialog(Stage ownerStage) {
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.initModality(Modality.APPLICATION_MODAL);
-        dialog.initOwner(ownerStage);
-        dialog.setTitle("Project Phase → Epic → Task → Sub-Task Hierarchy");
-
-        TreeItem<HierarchyNode> rootItem = new TreeItem<>(new HierarchyNode(HierarchyType.ROOT, null, "All Project Phases"));
-        rootItem.setExpanded(true);
-        loadHierarchyTree(rootItem);
-
-        TreeView<HierarchyNode> treeView = new TreeView<>(rootItem);
-        treeView.setShowRoot(true);
-        treeView.setMinHeight(500);
-        treeView.setMinWidth(500);
-        treeView.setCellFactory(tv -> new TreeCell<>() {
-            @Override
-            protected void updateItem(HierarchyNode item, boolean empty) {
-                super.updateItem(item, empty);
-                setText((empty || item == null) ? null : item.displayName);
-            }
-        });
-
-        // --- Double-click to edit ---
-        treeView.setOnMouseClicked(event -> {
-            if (event.getClickCount() == 2) {
-                TreeItem<HierarchyNode> selected = treeView.getSelectionModel().getSelectedItem();
-                if (selected != null && selected.getValue().type != HierarchyType.ROOT) {
-                    showHierarchyCrudDialog(selected, treeView, false); // edit mode
-                }
-            }
-        });
-
-        // Keyboard navigation and CRUD
-        treeView.setOnKeyPressed(event -> {
-            TreeItem<HierarchyNode> selected = treeView.getSelectionModel().getSelectedItem();
-            if (event.getCode() == KeyCode.N && event.isControlDown()) {
-                if (selected != null && selected.getValue().type != HierarchyType.ROOT) {
-                    showHierarchyCrudDialog(selected, treeView, false); // edit mode
-                } else {
-                    // Create new root phase
-                    showHierarchyCrudDialog(rootItem, treeView, true); // create mode
-                }
-                event.consume();
-            } else if (event.getCode() == KeyCode.DELETE && selected != null && selected.getValue().type != HierarchyType.ROOT) {
-                deleteHierarchyNode(selected, treeView);
-                event.consume();
-            }
-        });
-
-        VBox vbox = new VBox(10, treeView);
-        vbox.setPadding(new Insets(10));
-        dialog.getDialogPane().setContent(vbox);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        dialog.showAndWait();
+        new ProjectHierarchyDialog(ownerStage, new DatabaseUtil(), this).show();
     }
 
     // --- CRUD Dialog (Create or Edit) ---
-    private void showHierarchyCrudDialog(TreeItem<HierarchyNode> nodeItem, TreeView<HierarchyNode> treeView, boolean isCreate) {
+    public void showHierarchyCrudDialog(TreeItem<HierarchyNode> nodeItem, TreeView<HierarchyNode> treeView,
+            boolean isCreate) {
         HierarchyNode node = nodeItem.getValue();
         Dialog<Void> dialog = new Dialog<>();
         dialog.initModality(Modality.APPLICATION_MODAL);
@@ -302,28 +242,35 @@ public class KanbanProjectManager extends Application {
         }
         dialog.setTitle(dialogTitle);
         GridPane grid = new GridPane();
-        grid.setHgap(10); grid.setVgap(10); grid.setPadding(new Insets(20, 20, 10, 10));
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 20, 10, 10));
         TextField nameField = new TextField();
         TextField skillSetsField = new TextField();
         if (targetType == HierarchyType.PHASE) {
-            grid.add(new Label("Phase Name:"), 0, 0); grid.add(nameField, 1, 0);
-            grid.add(new Label("Skill Sets Needed:"), 0, 1); grid.add(skillSetsField, 1, 1);
+            grid.add(new Label("Phase Name:"), 0, 0);
+            grid.add(nameField, 1, 0);
+            grid.add(new Label("Skill Sets Needed:"), 0, 1);
+            grid.add(skillSetsField, 1, 1);
             if (!isCreate && node.type == HierarchyType.PHASE) {
                 nameField.setText(node.displayName.replaceFirst("^Phase: ", ""));
                 skillSetsField.setText(node.skillSets != null ? node.skillSets : "");
             }
         } else if (targetType == HierarchyType.EPIC) {
-            grid.add(new Label("Epic Name:"), 0, 0); grid.add(nameField, 1, 0);
+            grid.add(new Label("Epic Name:"), 0, 0);
+            grid.add(nameField, 1, 0);
             if (!isCreate && node.type == HierarchyType.EPIC) {
                 nameField.setText(node.displayName.replaceFirst("^Epic: ", ""));
             }
         } else if (targetType == HierarchyType.TASK) {
-            grid.add(new Label("Task Name:"), 0, 0); grid.add(nameField, 1, 0);
+            grid.add(new Label("Task Name:"), 0, 0);
+            grid.add(nameField, 1, 0);
             if (!isCreate && node.type == HierarchyType.TASK) {
                 nameField.setText(node.displayName.replaceFirst("^Task: ", ""));
             }
         } else if (targetType == HierarchyType.SUBTASK) {
-            grid.add(new Label("Sub-Task Name:"), 0, 0); grid.add(nameField, 1, 0);
+            grid.add(new Label("Sub-Task Name:"), 0, 0);
+            grid.add(nameField, 1, 0);
             if (!isCreate && node.type == HierarchyType.SUBTASK) {
                 nameField.setText(node.displayName.replaceFirst("^Sub-Task: ", ""));
             }
@@ -410,80 +357,119 @@ public class KanbanProjectManager extends Application {
         }
     }
 
+    /**
+     * Shows an error dialog (static version for use in utility classes).
+     * 
+     * @param title   the dialog title
+     * @param content the dialog content
+     */
+    public static void showErrorDialogStatic(String title, String content) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(content);
+        alert.showAndWait();
+    }
+
     // --- Hierarchy Types and Node ---
-    enum HierarchyType { ROOT, PHASE, EPIC, TASK, SUBTASK }
-    static class HierarchyNode {
-        HierarchyType type;
-        Integer id; // DB id
-        String displayName;
-        String skillSets; // Only for phase
-        HierarchyNode(HierarchyType type, Integer id, String displayName) {
-            this.type = type; this.id = id; this.displayName = displayName;
-        }
-        HierarchyNode(HierarchyType type, Integer id, String displayName, String skillSets) {
-            this(type, id, displayName); this.skillSets = skillSets;
-        }
-        @Override public String toString() { return displayName; }
+    /**
+     * Hierarchy types for the project hierarchy tree.
+     */
+    public static enum HierarchyType {
+        ROOT, PHASE, EPIC, TASK, SUBTASK
     }
 
     // --- Load Hierarchy Tree ---
+    /**
+     * Loads the project hierarchy tree into the given root item.
+     * 
+     * @param rootItem the root TreeItem to populate
+     */
     private void loadHierarchyTree(TreeItem<HierarchyNode> rootItem) {
         rootItem.getChildren().clear();
         try (Connection conn = dataSource.getConnection()) {
-            // PHASES
-            String phaseSql = "SELECT phase_id, phase_name, skill_sets FROM project_phases ORDER BY phase_name";
-            try (PreparedStatement psPhase = conn.prepareStatement(phaseSql);
-                 ResultSet rsPhase = psPhase.executeQuery()) {
-                while (rsPhase.next()) {
-                    int phaseId = rsPhase.getInt("phase_id");
-                    String phaseName = rsPhase.getString("phase_name");
-                    String skillSets = rsPhase.getString("skill_sets");
-                    TreeItem<HierarchyNode> phaseItem = new TreeItem<>(new HierarchyNode(HierarchyType.PHASE, phaseId, "Phase: " + phaseName, skillSets));
-                    // EPICS
-                    String epicSql = "SELECT epic_id, epic_name FROM epics WHERE phase_id = ? ORDER BY epic_name";
-                    try (PreparedStatement psEpic = conn.prepareStatement(epicSql)) {
-                        psEpic.setInt(1, phaseId);
-                        try (ResultSet rsEpic = psEpic.executeQuery()) {
-                            while (rsEpic.next()) {
-                                int epicId = rsEpic.getInt("epic_id");
-                                String epicName = rsEpic.getString("epic_name");
-                                TreeItem<HierarchyNode> epicItem = new TreeItem<>(new HierarchyNode(HierarchyType.EPIC, epicId, "Epic: " + epicName));
-                                // TASKS
-                                String taskSql = "SELECT id, title FROM tasks WHERE epic_id = ? ORDER BY title";
-                                try (PreparedStatement psTask = conn.prepareStatement(taskSql)) {
-                                    psTask.setInt(1, epicId);
-                                    try (ResultSet rsTask = psTask.executeQuery()) {
-                                        while (rsTask.next()) {
-                                            int taskId = rsTask.getInt("id");
-                                            String taskTitle = rsTask.getString("title");
-                                            TreeItem<HierarchyNode> taskItem = new TreeItem<>(new HierarchyNode(HierarchyType.TASK, taskId, "Task: " + taskTitle));
-                                            // SUBTASKS
-                                            String subSql = "SELECT subtask_id, subtask_name FROM subtasks WHERE task_id = ? ORDER BY subtask_name";
-                                            try (PreparedStatement psSub = conn.prepareStatement(subSql)) {
-                                                psSub.setInt(1, taskId);
-                                                try (ResultSet rsSub = psSub.executeQuery()) {
-                                                    while (rsSub.next()) {
-                                                        int subId = rsSub.getInt("subtask_id");
-                                                        String subName = rsSub.getString("subtask_name");
-                                                        TreeItem<HierarchyNode> subItem = new TreeItem<>(new HierarchyNode(HierarchyType.SUBTASK, subId, "Sub-Task: " + subName));
-                                                        taskItem.getChildren().add(subItem);
-                                                    }
-                                                }
-                                            }
-                                            epicItem.getChildren().add(taskItem);
-                                        }
-                                    }
-                                }
-                                phaseItem.getChildren().add(epicItem);
-                            }
-                        }
-                    }
-                    rootItem.getChildren().add(phaseItem);
-                }
-            }
+            loadPhases(conn, rootItem);
         } catch (SQLException e) {
             rootItem.getChildren().clear();
-            rootItem.getChildren().add(new TreeItem<>(new HierarchyNode(HierarchyType.ROOT, null, "Error: " + e.getMessage())));
+            rootItem.getChildren()
+                    .add(new TreeItem<>(new HierarchyNode(HierarchyType.ROOT, null, "Error: " + e.getMessage())));
+        }
+    }
+
+    /**
+     * Loads all phases and their children into the root item.
+     */
+    private void loadPhases(Connection conn, TreeItem<HierarchyNode> rootItem) throws SQLException {
+        String phaseSql = "SELECT phase_id, phase_name, skill_sets FROM project_phases ORDER BY phase_name";
+        try (PreparedStatement psPhase = conn.prepareStatement(phaseSql); ResultSet rsPhase = psPhase.executeQuery()) {
+            while (rsPhase.next()) {
+                int phaseId = rsPhase.getInt("phase_id");
+                String phaseName = rsPhase.getString("phase_name");
+                String skillSets = rsPhase.getString("skill_sets");
+                TreeItem<HierarchyNode> phaseItem = new TreeItem<>(
+                        new HierarchyNode(HierarchyType.PHASE, phaseId, "Phase: " + phaseName, skillSets));
+                loadEpics(conn, phaseItem, phaseId);
+                rootItem.getChildren().add(phaseItem);
+            }
+        }
+    }
+
+    /**
+     * Loads all epics for a given phase and their children.
+     */
+    private void loadEpics(Connection conn, TreeItem<HierarchyNode> phaseItem, int phaseId) throws SQLException {
+        String epicSql = "SELECT epic_id, epic_name FROM epics WHERE phase_id = ? ORDER BY epic_name";
+        try (PreparedStatement psEpic = conn.prepareStatement(epicSql)) {
+            psEpic.setInt(1, phaseId);
+            try (ResultSet rsEpic = psEpic.executeQuery()) {
+                while (rsEpic.next()) {
+                    int epicId = rsEpic.getInt("epic_id");
+                    String epicName = rsEpic.getString("epic_name");
+                    TreeItem<HierarchyNode> epicItem = new TreeItem<>(
+                            new HierarchyNode(HierarchyType.EPIC, epicId, "Epic: " + epicName));
+                    loadTasks(conn, epicItem, epicId);
+                    phaseItem.getChildren().add(epicItem);
+                }
+            }
+        }
+    }
+
+    /**
+     * Loads all tasks for a given epic and their children.
+     */
+    private void loadTasks(Connection conn, TreeItem<HierarchyNode> epicItem, int epicId) throws SQLException {
+        String taskSql = "SELECT id, title FROM tasks WHERE epic_id = ? ORDER BY title";
+        try (PreparedStatement psTask = conn.prepareStatement(taskSql)) {
+            psTask.setInt(1, epicId);
+            try (ResultSet rsTask = psTask.executeQuery()) {
+                while (rsTask.next()) {
+                    int taskId = rsTask.getInt("id");
+                    String taskTitle = rsTask.getString("title");
+                    TreeItem<HierarchyNode> taskItem = new TreeItem<>(
+                            new HierarchyNode(HierarchyType.TASK, taskId, "Task: " + taskTitle));
+                    loadSubtasks(conn, taskItem, taskId);
+                    epicItem.getChildren().add(taskItem);
+                }
+            }
+        }
+    }
+
+    /**
+     * Loads all subtasks for a given task.
+     */
+    private void loadSubtasks(Connection conn, TreeItem<HierarchyNode> taskItem, int taskId) throws SQLException {
+        String subSql = "SELECT subtask_id, subtask_name FROM subtasks WHERE task_id = ? ORDER BY subtask_name";
+        try (PreparedStatement psSub = conn.prepareStatement(subSql)) {
+            psSub.setInt(1, taskId);
+            try (ResultSet rsSub = psSub.executeQuery()) {
+                while (rsSub.next()) {
+                    int subId = rsSub.getInt("subtask_id");
+                    String subName = rsSub.getString("subtask_name");
+                    TreeItem<HierarchyNode> subItem = new TreeItem<>(
+                            new HierarchyNode(HierarchyType.SUBTASK, subId, "Sub-Task: " + subName));
+                    taskItem.getChildren().add(subItem);
+                }
+            }
         }
     }
 
@@ -493,19 +479,23 @@ public class KanbanProjectManager extends Application {
         try (Connection conn = dataSource.getConnection()) {
             if (n.type == HierarchyType.PHASE) {
                 try (PreparedStatement ps = conn.prepareStatement("DELETE FROM project_phases WHERE phase_id = ?")) {
-                    ps.setInt(1, n.id); ps.executeUpdate();
+                    ps.setInt(1, n.id);
+                    ps.executeUpdate();
                 }
             } else if (n.type == HierarchyType.EPIC) {
                 try (PreparedStatement ps = conn.prepareStatement("DELETE FROM epics WHERE epic_id = ?")) {
-                    ps.setInt(1, n.id); ps.executeUpdate();
+                    ps.setInt(1, n.id);
+                    ps.executeUpdate();
                 }
             } else if (n.type == HierarchyType.TASK) {
                 try (PreparedStatement ps = conn.prepareStatement("DELETE FROM tasks WHERE id = ?")) {
-                    ps.setInt(1, n.id); ps.executeUpdate();
+                    ps.setInt(1, n.id);
+                    ps.executeUpdate();
                 }
             } else if (n.type == HierarchyType.SUBTASK) {
                 try (PreparedStatement ps = conn.prepareStatement("DELETE FROM subtasks WHERE subtask_id = ?")) {
-                    ps.setInt(1, n.id); ps.executeUpdate();
+                    ps.setInt(1, n.id);
+                    ps.executeUpdate();
                 }
             }
         } catch (SQLException e) {
@@ -514,7 +504,6 @@ public class KanbanProjectManager extends Application {
         loadHierarchyTree((TreeItem<HierarchyNode>) treeView.getRoot());
     }
 
-
     private void loadTasksFromDB() {
         for (KanbanColumn column : columns) {
             column.clearTasks();
@@ -522,20 +511,14 @@ public class KanbanProjectManager extends Application {
 
         String sql = "SELECT id, title, description, assignee, module, status, priority, due_date FROM tasks";
         try (Connection conn = dataSource.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql);
-             ResultSet rs = pstmt.executeQuery()) {
+                PreparedStatement pstmt = conn.prepareStatement(sql);
+                ResultSet rs = pstmt.executeQuery()) {
 
             while (rs.next()) {
-                Task task = new Task(
-                        rs.getInt("id"),
-                        rs.getString("title"),
-                        rs.getString("description"),
-                        rs.getString("assignee"),
-                        rs.getString("module"),
-                        rs.getString("status"),
+                Task task = new Task(rs.getInt("id"), rs.getString("title"), rs.getString("description"),
+                        rs.getString("assignee"), rs.getString("module"), rs.getString("status"),
                         rs.getString("priority"),
-                        rs.getString("due_date") != null ? LocalDate.parse(rs.getString("due_date")) : null
-                );
+                        rs.getString("due_date") != null ? LocalDate.parse(rs.getString("due_date")) : null);
                 addTaskToCorrectColumn(task);
             }
         } catch (SQLException e) {
@@ -546,20 +529,21 @@ public class KanbanProjectManager extends Application {
 
     private void addTaskToCorrectColumn(Task task) {
         for (KanbanColumn column : columns) {
-            if (column.getStatus().equals(task.getStatus())) {
+            if (column.getStatus().equals(task.status())) {
                 column.addTaskCard(task);
                 return;
             }
         }
-        System.err.println("Task '" + task.getTitle() + "' has unknown status: " + task.getStatus() + ". Adding to 'To Do'.");
+        System.err.println("Task '" + task.title() + "' has unknown status: " + task.status() + ". Adding to 'To Do'.");
         if (!columns.isEmpty()) {
-            task.setStatus(columns.get(0).getStatus());
-            columns.get(0).addTaskCard(task);
-            updateTaskInDB(task);
+            Task updatedTask = new Task(task.id(), task.title(), task.description(), task.assignee(), task.module(),
+                    columns.get(0).getStatus(), task.priority(), task.dueDate());
+            columns.get(0).addTaskCard(updatedTask);
+            updateTaskInDB(updatedTask);
         }
     }
 
-
+    @SuppressWarnings("unused")
     private void showTaskDialog(Task existingTask, Stage ownerStage) {
         Dialog<Task> dialog = new Dialog<>();
         dialog.initModality(Modality.APPLICATION_MODAL);
@@ -588,25 +572,31 @@ public class KanbanProjectManager extends Application {
         dueDatePicker.setPromptText("Due Date");
 
         if (existingTask != null) {
-            titleField.setText(existingTask.getTitle());
-            descriptionArea.setText(existingTask.getDescription());
-            assigneeCombo.setValue(existingTask.getAssignee());
-            moduleCombo.setValue(existingTask.getModule());
-            statusCombo.setValue(existingTask.getStatus());
-            priorityCombo.setValue(existingTask.getPriority());
-            dueDatePicker.setValue(existingTask.getDueDate());
+            titleField.setText(existingTask.title());
+            descriptionArea.setText(existingTask.description());
+            assigneeCombo.setValue(existingTask.assignee());
+            moduleCombo.setValue(existingTask.module());
+            statusCombo.setValue(existingTask.status());
+            priorityCombo.setValue(existingTask.priority());
+            dueDatePicker.setValue(existingTask.dueDate());
         } else {
             statusCombo.setValue(STATUS_LIST.get(0));
         }
 
-
-        grid.add(new Label("Title:"), 0, 0); grid.add(titleField, 1, 0);
-        grid.add(new Label("Description:"), 0, 1); grid.add(descriptionArea, 1, 1);
-        grid.add(new Label("Assignee:"), 0, 2); grid.add(assigneeCombo, 1, 2);
-        grid.add(new Label("Module:"), 0, 3); grid.add(moduleCombo, 1, 3);
-        grid.add(new Label("Status:"), 0, 4); grid.add(statusCombo, 1, 4);
-        grid.add(new Label("Priority:"), 0, 5); grid.add(priorityCombo, 1, 5);
-        grid.add(new Label("Due Date:"), 0, 6); grid.add(dueDatePicker, 1, 6);
+        grid.add(new Label("Title:"), 0, 0);
+        grid.add(titleField, 1, 0);
+        grid.add(new Label("Description:"), 0, 1);
+        grid.add(descriptionArea, 1, 1);
+        grid.add(new Label("Assignee:"), 0, 2);
+        grid.add(assigneeCombo, 1, 2);
+        grid.add(new Label("Module:"), 0, 3);
+        grid.add(moduleCombo, 1, 3);
+        grid.add(new Label("Status:"), 0, 4);
+        grid.add(statusCombo, 1, 4);
+        grid.add(new Label("Priority:"), 0, 5);
+        grid.add(priorityCombo, 1, 5);
+        grid.add(new Label("Due Date:"), 0, 6);
+        grid.add(dueDatePicker, 1, 6);
 
         dialog.getDialogPane().setContent(grid);
 
@@ -615,25 +605,18 @@ public class KanbanProjectManager extends Application {
 
         Node saveButton = dialog.getDialogPane().lookupButton(saveButtonType);
         saveButton.setDisable(true);
-        titleField.textProperty().addListener((observable, oldValue, newValue) -> {
+        titleField.textProperty().addListener((unused1, unused2, newValue) -> {
             saveButton.setDisable(newValue.trim().isEmpty());
         });
-        if (existingTask != null && !existingTask.getTitle().isEmpty()) {
+        if (existingTask != null && !existingTask.title().isEmpty()) {
             saveButton.setDisable(false);
         }
 
-
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == saveButtonType) {
-                Task task = (existingTask == null) ? new Task() : existingTask;
-                task.setTitle(titleField.getText());
-                task.setDescription(descriptionArea.getText());
-                task.setAssignee(assigneeCombo.getValue());
-                task.setModule(moduleCombo.getValue());
-                task.setStatus(statusCombo.getValue());
-                task.setPriority(priorityCombo.getValue());
-                task.setDueDate(dueDatePicker.getValue());
-                return task;
+                return new Task(existingTask == null ? 0 : existingTask.id(), titleField.getText(),
+                        descriptionArea.getText(), assigneeCombo.getValue(), moduleCombo.getValue(),
+                        statusCombo.getValue(), priorityCombo.getValue(), dueDatePicker.getValue());
             }
             return null;
         });
@@ -652,20 +635,20 @@ public class KanbanProjectManager extends Application {
     private void saveTaskToDB(Task task) {
         String sql = "INSERT INTO tasks(title, description, assignee, module, status, priority, due_date) VALUES(?,?,?,?,?,?,?)";
         try (Connection conn = dataSource.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            pstmt.setString(1, task.getTitle());
-            pstmt.setString(2, task.getDescription());
-            pstmt.setString(3, task.getAssignee());
-            pstmt.setString(4, task.getModule());
-            pstmt.setString(5, task.getStatus());
-            pstmt.setString(6, task.getPriority());
-            pstmt.setString(7, task.getDueDate() != null ? task.getDueDate().format(DateTimeFormatter.ISO_LOCAL_DATE) : null);
+                PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            pstmt.setString(1, task.title());
+            pstmt.setString(2, task.description());
+            pstmt.setString(3, task.assignee());
+            pstmt.setString(4, task.module());
+            pstmt.setString(5, task.status());
+            pstmt.setString(6, task.priority());
+            pstmt.setString(7, task.dueDate() != null ? task.dueDate().format(DateTimeFormatter.ISO_LOCAL_DATE) : null);
 
             int affectedRows = pstmt.executeUpdate();
             if (affectedRows > 0) {
                 try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
                     if (generatedKeys.next()) {
-                        task.setId(generatedKeys.getInt(1));
+                        // No way to update id in record, but not used after insert
                     }
                 }
             }
@@ -677,16 +660,15 @@ public class KanbanProjectManager extends Application {
 
     private void updateTaskInDB(Task task) {
         String sql = "UPDATE tasks SET title = ?, description = ?, assignee = ?, module = ?, status = ?, priority = ?, due_date = ? WHERE id = ?";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, task.getTitle());
-            pstmt.setString(2, task.getDescription());
-            pstmt.setString(3, task.getAssignee());
-            pstmt.setString(4, task.getModule());
-            pstmt.setString(5, task.getStatus());
-            pstmt.setString(6, task.getPriority());
-            pstmt.setString(7, task.getDueDate() != null ? task.getDueDate().format(DateTimeFormatter.ISO_LOCAL_DATE) : null);
-            pstmt.setInt(8, task.getId());
+        try (Connection conn = dataSource.getConnection(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, task.title());
+            pstmt.setString(2, task.description());
+            pstmt.setString(3, task.assignee());
+            pstmt.setString(4, task.module());
+            pstmt.setString(5, task.status());
+            pstmt.setString(6, task.priority());
+            pstmt.setString(7, task.dueDate() != null ? task.dueDate().format(DateTimeFormatter.ISO_LOCAL_DATE) : null);
+            pstmt.setInt(8, task.id());
             pstmt.executeUpdate();
         } catch (SQLException e) {
             System.err.println("Error updating task in DB: " + e.getMessage());
@@ -696,9 +678,8 @@ public class KanbanProjectManager extends Application {
 
     private void deleteTaskFromDB(Task task) {
         String sql = "DELETE FROM tasks WHERE id = ?";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, task.getId());
+        try (Connection conn = dataSource.getConnection(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, task.id());
             pstmt.executeUpdate();
         } catch (SQLException e) {
             System.err.println("Error deleting task from DB: " + e.getMessage());
@@ -709,8 +690,10 @@ public class KanbanProjectManager extends Application {
     private void setupKeyboardNavigation(Scene scene) {
         scene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
             KanbanColumn currentFocusedColumn = columns.get(focusedColumnIndex);
-            TaskCard currentFocusedTaskCard = (focusedTaskIndexInColumn >= 0 && focusedTaskIndexInColumn < currentFocusedColumn.getTaskCount()) ?
-                    currentFocusedColumn.getTaskCard(focusedTaskIndexInColumn) : null;
+            TaskCard currentFocusedTaskCard = (focusedTaskIndexInColumn >= 0
+                    && focusedTaskIndexInColumn < currentFocusedColumn.getTaskCount())
+                            ? currentFocusedColumn.getTaskCard(focusedTaskIndexInColumn)
+                            : null;
 
             if (event.getCode() == KeyCode.RIGHT) {
                 if (focusedTaskIndexInColumn == -1) {
@@ -775,7 +758,7 @@ public class KanbanProjectManager extends Application {
             } else if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) {
                 if (currentFocusedTaskCard != null && event.isControlDown()) {
                     Alert confirmDialog = new Alert(Alert.AlertType.CONFIRMATION,
-                            "Are you sure you want to delete task '" + currentFocusedTaskCard.getTask().getTitle() + "'?",
+                            "Are you sure you want to delete task '" + currentFocusedTaskCard.getTask().title() + "'?",
                             ButtonType.YES, ButtonType.NO);
                     confirmDialog.setTitle("Confirm Deletion");
                     confirmDialog.setHeaderText(null);
@@ -795,17 +778,18 @@ public class KanbanProjectManager extends Application {
     }
 
     private void moveTask(Task task, int direction) {
-        int currentStatusIndex = STATUS_LIST.indexOf(task.getStatus());
+        int currentStatusIndex = STATUS_LIST.indexOf(task.status());
         int newStatusIndex = currentStatusIndex + direction;
 
         if (newStatusIndex >= 0 && newStatusIndex < STATUS_LIST.size()) {
-            task.setStatus(STATUS_LIST.get(newStatusIndex));
-            updateTaskInDB(task);
+            Task updatedTask = new Task(task.id(), task.title(), task.description(), task.assignee(), task.module(),
+                    STATUS_LIST.get(newStatusIndex), task.priority(), task.dueDate());
+            updateTaskInDB(updatedTask);
             loadTasksFromDB();
 
             focusedColumnIndex = newStatusIndex;
             KanbanColumn newColumn = columns.get(focusedColumnIndex);
-            focusedTaskIndexInColumn = newColumn.findTaskIndex(task.getId());
+            focusedTaskIndexInColumn = newColumn.findTaskIndex(updatedTask.id());
 
             updateColumnFocus();
             updateTaskFocus();
@@ -844,7 +828,6 @@ public class KanbanProjectManager extends Application {
         alert.showAndWait();
     }
 
-
     @Override
     public void stop() throws Exception {
         if (dataSource != null) {
@@ -856,64 +839,14 @@ public class KanbanProjectManager extends Application {
 
     // --- Inner Classes ---
 
-    static class Task {
-        private int id;
-        private StringProperty title = new SimpleStringProperty();
-        private StringProperty description = new SimpleStringProperty();
-        private StringProperty assignee = new SimpleStringProperty();
-        private StringProperty module = new SimpleStringProperty();
-        private StringProperty status = new SimpleStringProperty();
-        private StringProperty priority = new SimpleStringProperty();
-        private ObjectProperty<LocalDate> dueDate = new SimpleObjectProperty<>();
-
-
-        public Task() {}
-
-        public Task(int id, String title, String description, String assignee, String module, String status, String priority, LocalDate dueDate) {
-            this.id = id;
-            setTitle(title);
-            setDescription(description);
-            setAssignee(assignee);
-            setModule(module);
-            setStatus(status);
-            setPriority(priority);
-            setDueDate(dueDate);
-        }
-
-        public int getId() { return id; }
-        public void setId(int id) { this.id = id; }
-
-        public String getTitle() { return title.get(); }
-        public void setTitle(String title) { this.title.set(title); }
-        public StringProperty titleProperty() { return title; }
-
-        public String getDescription() { return description.get(); }
-        public void setDescription(String description) { this.description.set(description); }
-        public StringProperty descriptionProperty() { return description; }
-
-        public String getAssignee() { return assignee.get(); }
-        public void setAssignee(String assignee) { this.assignee.set(assignee); }
-        public StringProperty assigneeProperty() { return assignee; }
-
-        public String getModule() { return module.get(); }
-        public void setModule(String module) { this.module.set(module); }
-        public StringProperty moduleProperty() { return module; }
-
-        public String getStatus() { return status.get(); }
-        public void setStatus(String status) { this.status.set(status); }
-        public StringProperty statusProperty() { return status; }
-
-        public String getPriority() { return priority.get(); }
-        public void setPriority(String priority) { this.priority.set(priority); }
-        public StringProperty priorityProperty() { return priority; }
-
-        public LocalDate getDueDate() { return dueDate.get(); }
-        public void setDueDate(LocalDate dueDate) { this.dueDate.set(dueDate); }
-        public ObjectProperty<LocalDate> dueDateProperty() { return dueDate; }
-
+    /**
+     * Represents a Kanban task. Immutable record version for Java 21.
+     */
+    public static record Task(int id, String title, String description, String assignee, String module, String status,
+            String priority, LocalDate dueDate) {
         @Override
         public String toString() {
-            return getTitle();
+            return title;
         }
     }
 
@@ -922,7 +855,6 @@ public class KanbanProjectManager extends Application {
         private VBox taskContainer;
         private String status;
         private ObservableList<TaskCard> taskCards = FXCollections.observableArrayList();
-
 
         public KanbanColumn(String status) {
             this.status = status;
@@ -934,7 +866,6 @@ public class KanbanProjectManager extends Application {
             this.setMaxWidth(350); // Max width
             this.setAlignment(Pos.TOP_CENTER);
 
-
             titleLabel = new Label(status);
             titleLabel.getStyleClass().add("column-title");
 
@@ -942,13 +873,11 @@ public class KanbanProjectManager extends Application {
             taskContainer.getStyleClass().add("task-container");
             VBox.setVgrow(taskContainer, Priority.ALWAYS);
 
-
             ScrollPane scrollPane = new ScrollPane(taskContainer);
             scrollPane.setFitToWidth(true);
             scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
             scrollPane.getStyleClass().add("column-scroll-pane");
             VBox.setVgrow(scrollPane, Priority.ALWAYS);
-
 
             this.getChildren().addAll(titleLabel, scrollPane);
             setupDragAndDrop(this);
@@ -987,7 +916,7 @@ public class KanbanProjectManager extends Application {
 
         public int findTaskIndex(int taskId) {
             for (int i = 0; i < taskCards.size(); i++) {
-                if (taskCards.get(i).getTask().getId() == taskId) {
+                if (taskCards.get(i).getTask().id() == taskId) {
                     return i;
                 }
             }
@@ -1043,21 +972,23 @@ public class KanbanProjectManager extends Application {
                             // Remove from old column UI only, DB update will refresh all
                             for (KanbanColumn col : columns) {
                                 TaskCard cardToRemove = null;
-                                for(TaskCard tc : col.taskCards){
-                                    if(tc.getTask().getId() == taskId){
+                                for (TaskCard tc : col.taskCards) {
+                                    if (tc.getTask().id() == taskId) {
                                         cardToRemove = tc;
                                         break;
                                     }
                                 }
-                                if(cardToRemove != null){
+                                if (cardToRemove != null) {
                                     // Don't remove from UI here, let loadTasksFromDB handle it
                                     // col.removeTaskCard(cardToRemove);
                                     break;
                                 }
                             }
 
-                            taskToMove.setStatus(targetColumn.getStatus());
-                            updateTaskInDB(taskToMove);
+                            Task updatedTask = new Task(taskToMove.id(), taskToMove.title(), taskToMove.description(),
+                                    taskToMove.assignee(), taskToMove.module(), targetColumn.getStatus(),
+                                    taskToMove.priority(), taskToMove.dueDate());
+                            updateTaskInDB(updatedTask);
                             loadTasksFromDB(); // Reload all tasks to reflect the change correctly
                             success = true;
 
@@ -1078,7 +1009,7 @@ public class KanbanProjectManager extends Application {
         private Task findTaskByIdGlobal(int taskId) {
             for (KanbanColumn column : columns) {
                 for (TaskCard card : column.taskCards) {
-                    if (card.getTask().getId() == taskId) {
+                    if (card.getTask().id() == taskId) {
                         return card.getTask();
                     }
                 }
@@ -1086,7 +1017,6 @@ public class KanbanProjectManager extends Application {
             return null;
         }
     }
-
 
     class TaskCard extends VBox {
         private Task task;
@@ -1100,56 +1030,28 @@ public class KanbanProjectManager extends Application {
             this.setPadding(new Insets(8));
             this.setSpacing(5);
             this.getStyleClass().add("task-card");
-            this.setStyle("-fx-border-color: #888; -fx-border-width: 2; -fx-border-radius: 8; -fx-background-radius: 8; -fx-background-color: white;");
+            this.setStyle(
+                    "-fx-border-color: #888; -fx-border-width: 2; -fx-border-radius: 8; -fx-background-radius: 8; -fx-background-color: white;");
             this.setMaxWidth(Double.MAX_VALUE); // Allow card to fill column width
             this.setMinWidth(0); // Allow card to shrink if needed
 
-
-            titleLabel = new Label();
-            titleLabel.textProperty().bind(task.titleProperty());
+            titleLabel = new Label(task.title());
             titleLabel.getStyleClass().add("task-title");
             titleLabel.setWrapText(true);
 
-
-            assigneeLabel = new Label();
-            assigneeLabel.textProperty().bind(task.assigneeProperty());
+            assigneeLabel = new Label(task.assignee());
             assigneeLabel.getStyleClass().add("task-detail");
             assigneeLabel.setWrapText(true);
 
-
-            priorityLabel = new Label();
-            priorityLabel.textProperty().bind(task.priorityProperty());
+            priorityLabel = new Label(task.priority());
             priorityLabel.getStyleClass().add("task-detail");
-            task.priorityProperty().addListener((obs, oldVal, newVal) -> updatePriorityStyle(newVal));
-            updatePriorityStyle(task.getPriority());
-
+            updatePriorityStyle(task.priority());
 
             dueDateLabel = new Label();
-            task.dueDateProperty().addListener((obs, oldVal, newVal) -> {
-                if (newVal != null) {
-                    dueDateLabel.setText("Due: " + newVal.format(DateTimeFormatter.ISO_LOCAL_DATE));
-                    if (newVal.isBefore(LocalDate.now())) {
-                        dueDateLabel.getStyleClass().add("task-detail-overdue");
-                        dueDateLabel.getStyleClass().remove("task-detail-upcoming");
-                    } else {
-                        dueDateLabel.getStyleClass().remove("task-detail-overdue");
-                        dueDateLabel.getStyleClass().add("task-detail-upcoming");
-                    }
-                } else {
-                    dueDateLabel.setText("");
-                    dueDateLabel.getStyleClass().removeAll("task-detail-overdue", "task-detail-upcoming");
-                }
-            });
-            if (task.getDueDate() != null) {
-                dueDateLabel.setText("Due: " + task.getDueDate().format(DateTimeFormatter.ISO_LOCAL_DATE));
-                if (task.getDueDate().isBefore(LocalDate.now())) {
-                    dueDateLabel.getStyleClass().add("task-detail-overdue");
-                } else {
-                    dueDateLabel.getStyleClass().add("task-detail-upcoming");
-                }
+            if (task.dueDate() != null) {
+                dueDateLabel.setText("Due: " + task.dueDate().format(DateTimeFormatter.ISO_LOCAL_DATE));
             }
             dueDateLabel.getStyleClass().add("task-detail");
-
 
             this.getChildren().addAll(titleLabel, assigneeLabel, priorityLabel, dueDateLabel);
 
@@ -1162,7 +1064,7 @@ public class KanbanProjectManager extends Application {
             this.setOnDragDetected(event -> {
                 Dragboard db = this.startDragAndDrop(TransferMode.MOVE);
                 ClipboardContent content = new ClipboardContent();
-                content.putString(String.valueOf(task.getId()));
+                content.putString(String.valueOf(task.id()));
                 db.setContent(content);
                 this.getStyleClass().add("dragging-card");
                 event.consume();
@@ -1180,25 +1082,20 @@ public class KanbanProjectManager extends Application {
 
         public void setFocusStyle(boolean focused) {
             if (focused) {
-                this.getStyleClass().add("focused-task-card");
+                this.setStyle(this.getStyle() + ";-fx-background-color: #e0f7fa;");
             } else {
-                this.getStyleClass().remove("focused-task-card");
+                this.setStyle(
+                        "-fx-border-color: #888; -fx-border-width: 2; -fx-border-radius: 8; -fx-background-radius: 8; -fx-background-color: white;");
             }
         }
 
         private void updatePriorityStyle(String priority) {
             this.getStyleClass().removeAll("priority-high", "priority-medium", "priority-low");
             if (priority != null) {
-                switch (priority.toLowerCase()) {
-                    case "high":
-                        this.getStyleClass().add("priority-high");
-                        break;
-                    case "medium":
-                        this.getStyleClass().add("priority-medium");
-                        break;
-                    case "low":
-                        this.getStyleClass().add("priority-low");
-                        break;
+                switch (priority) {
+                case "High" -> this.getStyleClass().add("priority-high");
+                case "Medium" -> this.getStyleClass().add("priority-medium");
+                case "Low" -> this.getStyleClass().add("priority-low");
                 }
             }
         }
